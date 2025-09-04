@@ -18,7 +18,7 @@
 - [x] ~~Implement session timeout warnings~~ ✅ Completed
 - [x] ~~Add CSRF protection~~ ✅ Completed
 - [x] ~~Implement rate limiting per user/IP~~ ✅ Completed
-- [ ] Add OAuth scope validation
+- [x] ~~Add OAuth scope validation~~ ✅ Completed
 - [x] ~~Implement account lockout after failed attempts~~ ✅ Completed (for 2FA)
 
 ### Database & Backend
@@ -101,6 +101,8 @@
 
 ## 🐛 Known Bugs
 - [x] ~~Fix double authentication requirement~~ ✅ Fixed
+- [x] ~~Fix admin panel authentication and JWT validation~~ ✅ Fixed (2025-09-04)
+- [x] ~~Fix admin stats database queries (status → is_active)~~ ✅ Fixed (2025-09-04)
 - [ ] Resolve TypeScript compilation warnings
 - [ ] Fix rate limiter memory leak
 - [ ] Address Redis connection timeout issues

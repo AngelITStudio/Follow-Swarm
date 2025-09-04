@@ -118,3 +118,40 @@ npm run migrate:create  # Create new migration
 - Always restart tunnel when it goes down
 - Always use configured subdomain
 - Always check tunnel status after server restarts
+
+## 2025-09-04 05:20 - Admin Panel Authentication Fixed
+
+### Issue: Admin panel redirecting to login
+- Problem: JWT tokens not being validated correctly
+- Multiple authentication issues cascading
+
+### Root Causes Identified:
+1. Middleware execution order - requireSoft2FA running before isAuthenticated
+2. requireAdmin checking email list instead of role field
+3. Database query using non-existent 'status' column
+4. Frontend AdminDashboard not handling API response structure
+
+### Fixes Applied:
+1. ✓ Reordered middleware - isAuthenticated → requireAdmin → requireSoft2FA
+2. ✓ Fixed requireAdmin to check user.role === 'admin'
+3. ✓ Fixed database queries - changed 'status' to 'is_active'
+4. ✓ Fixed AdminDashboard to map response.data.data correctly
+5. ✓ Added debug logging for authentication flow
+6. ✓ Created server management scripts (server.sh, quick-restart.sh)
+
+### Authentication Flow Now:
+1. JWT token sent in Authorization header
+2. isAuthenticated validates token and loads user
+3. requireAdmin checks role field
+4. requireSoft2FA logs warning but allows access (grace period)
+5. Admin stats endpoint returns data successfully
+
+### Scripts Created:
+- server.sh - Complete server management (backend, frontend, tunnel)
+- quick-restart.sh - Quick backend + tunnel restart for development
+
+### Testing Confirmed:
+- Admin panel loads without redirects
+- JWT authentication working
+- Admin stats API returns data
+- Frontend displays real data from backend
