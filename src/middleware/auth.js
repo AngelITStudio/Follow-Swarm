@@ -17,6 +17,15 @@ const spotifyAuth = require('../auth/spotify');
  */
 const isAuthenticated = async (req, res, next) => {
   try {
+    // Debug logging for admin routes
+    if (req.originalUrl?.includes('/admin') || req.path.includes('/admin')) {
+      logger.info(`[AUTH DEBUG] Admin route check`);
+      logger.info(`[AUTH DEBUG] URL: ${req.originalUrl || req.url}`);
+      logger.info(`[AUTH DEBUG] Path: ${req.path}`);
+      logger.info(`[AUTH DEBUG] Authorization header: ${req.headers.authorization ? `Present (${req.headers.authorization.substring(0, 20)}...)` : 'Missing'}`);
+      logger.info(`[AUTH DEBUG] Session userId: ${req.session?.userId || 'None'}`);
+    }
+    
     // Check session
     if (req.session && req.session.userId) {
       // Get user from database
@@ -39,6 +48,7 @@ const isAuthenticated = async (req, res, next) => {
         
         if (user) {
           req.user = user;
+          logger.debug(`JWT auth successful for user: ${user.id} (${user.email})`);
           return next();
         }
       } catch (jwtError) {
@@ -47,6 +57,7 @@ const isAuthenticated = async (req, res, next) => {
     }
     
     // Not authenticated
+    logger.debug(`Authentication failed for ${req.path} - no valid session or token`);
     return res.status(401).json({
       error: 'Authentication required',
       message: 'Please log in to access this resource'

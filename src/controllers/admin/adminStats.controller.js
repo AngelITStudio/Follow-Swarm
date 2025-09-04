@@ -20,7 +20,7 @@ async function getStats(req, res) {
         COUNT(CASE WHEN subscription_tier = 'free' THEN 1 END) as free_users,
         COUNT(CASE WHEN subscription_tier = 'pro' THEN 1 END) as pro_users,
         COUNT(CASE WHEN subscription_tier = 'premium' THEN 1 END) as premium_users,
-        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_users,
+        COUNT(CASE WHEN is_active = true THEN 1 END) as active_users,
         COUNT(CASE WHEN created_at >= NOW() - INTERVAL '24 hours' THEN 1 END) as new_users_24h,
         COUNT(CASE WHEN created_at >= NOW() - INTERVAL '7 days' THEN 1 END) as new_users_7d,
         COUNT(CASE WHEN created_at >= NOW() - INTERVAL '30 days' THEN 1 END) as new_users_30d
@@ -45,7 +45,7 @@ async function getStats(req, res) {
         COUNT(CASE WHEN subscription_tier = 'pro' THEN 1 END) * 10 as pro_revenue,
         COUNT(CASE WHEN subscription_tier = 'premium' THEN 1 END) * 20 as premium_revenue
       FROM users 
-      WHERE status = 'active'
+      WHERE is_active = true
     `);
     
     const userStats = userStatsResult.rows[0];

@@ -21,11 +21,9 @@ async function requireAdmin(req, res, next) {
     
     const user = result.rows[0];
     
-    // Check if user has admin role by verifying email against admin list
-    // In production, this should check a role field in the database
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',') || ['admin@followswarm.com'];
-    
-    if (!user || !adminEmails.includes(user.email)) {
+    // Check if user has admin role
+    if (!user || user.role !== 'admin') {
+      logger.warn(`Access denied for user ${user?.email || 'unknown'} with role ${user?.role || 'none'}`);
       return res.status(403).json({
         error: 'Access denied',
         message: 'Admin privileges required'

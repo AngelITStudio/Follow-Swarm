@@ -89,9 +89,27 @@ Always make .bak of files before making significant changes to a file.
 - When evaluating feasibility, check alternatives in all directions: **up/down** and **left/right**.
 - Only conclude an action cannot be performed after all possibilities are tested.
 
+## Server Management
+
+**Use the server management scripts instead of manual commands:**
+
+### Full Server Management (./server.sh)
+- `./server.sh start` - Start all services (backend, frontend, tunnel)
+- `./server.sh stop` - Stop all services
+- `./server.sh restart` - Restart all services
+- `./server.sh status` - Check status and health of all services
+- `./server.sh backend restart` - Restart just the backend
+- `./server.sh tunnel restart` - Restart just the tunnel
+- `./server.sh logs backend` - View backend logs
+
+### Quick Development Restart (./quick-restart.sh)
+- `./quick-restart.sh` - Quickly restart backend and tunnel only
+
+**IMPORTANT**: Always use these scripts to manage servers. Do not use manual kill/start commands.
+
 ## Additional Development Rules
 
-- After making changes, ALWAYS make sure to start up a new server so I can test it.
+- After making changes, ALWAYS restart using `./quick-restart.sh` or `./server.sh restart`
 - Always look for existing code to iterate on instead of creating new code.
 - Do not drastically change the patterns before trying to iterate on existing patterns.
 - Always kill all existing related servers that may have been created in previous testing before trying to start a new server.

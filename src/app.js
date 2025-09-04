@@ -79,6 +79,10 @@ if (process.env.NODE_ENV !== 'test') {
 // Session management
 app.use(sessionMiddleware);
 
+// Session timeout monitoring
+const { sessionTimeoutMiddleware } = require('./middleware/sessionTimeout');
+app.use(sessionTimeoutMiddleware);
+
 // CSRF Protection
 // Skip CSRF for test environment to avoid breaking tests
 if (process.env.NODE_ENV !== 'test') {
@@ -154,6 +158,8 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/auth', require('./api/auth.routes'));
 app.use('/api/follows', require('./api/follow.routes'));
 app.use('/api/admin', require('./api/admin.routes'));
+app.use('/api/2fa', require('./routes/twoFactorAuth.routes'));
+app.use('/api/session', require('./routes/session.routes'));
 
 /**
  * Static Files (Production)

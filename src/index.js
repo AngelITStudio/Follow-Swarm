@@ -90,6 +90,10 @@ const startServer = async () => {
     redis.connect();
     logger.info('Redis connected');
     
+    // Start session timeout cleanup scheduler
+    const { startSessionCleanup } = require('./middleware/sessionTimeout');
+    startSessionCleanup();
+    
     // Initialize Bull queues for background processing
     await queueManager.initialize();
     logger.info('Queue manager initialized');

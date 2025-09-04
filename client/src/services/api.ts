@@ -29,9 +29,23 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // Redirect to login on 401
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Don't redirect if we're already on the login page or auth pages
+      const currentPath = window.location.pathname;
+      if (!currentPath.includes('/login') && 
+          !currentPath.includes('/auth/') &&
+          !currentPath.includes('/auth/success')) {
+        // Check if token exists before removing
+        const token = localStorage.getItem('token');
+        if (token) {
+          // Token exists but is invalid, clear it and redirect
+          localStorage.removeItem('token');
+          localStorage.removeItem('userId');
+          window.location.href = '/login';
+        } else {
+          // No token, just redirect
+          window.location.href = '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }

@@ -1,4 +1,3 @@
-
 ## 2025-09-03 00:26 - Test Coverage Progress Update
 
 ### Current Status:
@@ -34,3 +33,88 @@ Users need to remain logged in for the automated follow system to work continuou
 - Committed and pushed to remote repository
 - Added proper code comments per SOP
 - Created backup files before major changes
+
+## 2025-09-03 23:12 - Authentication Fixed & Working
+
+### Completed:
+- Fixed missing database columns for token rotation
+- Authentication flow now working properly
+- User can successfully login
+
+### Ready for next task
+
+## 2025-09-03 23:19 - Database Migration System Complete
+
+### Task: Item 1 from High Priority - Automated database migrations
+
+### Completed:
+1. ✓ Migration tracking table with checksums
+2. ✓ Migration runner class (235 lines)
+3. ✓ CLI tool with up/status/create commands
+4. ✓ NPM scripts integration
+5. ✓ Successfully ran 3 migrations
+
+### Key Features:
+- SHA256 checksum validation
+- Execution time tracking
+- Conditional column operations
+- Transaction support
+
+### Commands:
+```bash
+npm run migrate:up      # Run pending migrations
+npm run migrate:status  # Check migration status
+npm run migrate:create  # Create new migration
+```
+
+### Next High Priority Items:
+2. Implement 2FA for admin accounts
+3. Add rate limiting per user/IP
+
+## 2025-09-04 03:28 - 2FA Implementation Complete
+
+### Task: Two-Factor Authentication for admin accounts
+
+### Completed:
+1. ✓ Database migration for 2FA tables
+2. ✓ Core 2FA service (295 lines)
+3. ✓ API endpoints for setup/verification
+4. ✓ Integration with login flow
+5. ✓ Backup codes and lockout protection
+
+### Features:
+- TOTP-based authentication
+- QR code generation
+- 10 single-use backup codes
+- 3 attempt lockout (15 min)
+- Audit trail of attempts
+
+## 2025-09-04 03:35 - Rate Limiting Implementation Complete
+
+### Task: Per-user and per-IP rate limiting
+
+### Completed:
+1. ✓ Rate limiter middleware (240 lines)
+2. ✓ Different limits per endpoint type
+3. ✓ Subscription tier-based limits
+4. ✓ Rate limit headers in responses
+5. ✓ Applied to all critical endpoints
+
+### Configurations:
+- Auth: 5 attempts/15 min
+- API Free: 30 req/min
+- API Premium: 100 req/min
+- Follow: 30/hour (Spotify limit)
+- 2FA: 3 attempts/15 min
+
+## 2025-09-04 03:37 - SOP Compliance Update
+
+### Tunnel Management:
+- Restarted tunnel with correct subdomain: strong-deer-grow
+- URL: https://strong-deer-grow.loca.lt
+- Backend running on port 3001
+
+### Reminder:
+- Always restart tunnel when it goes down
+- Always use configured subdomain
+- Always check tunnel status after server restarts

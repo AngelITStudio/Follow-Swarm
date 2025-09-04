@@ -34,8 +34,8 @@ class TokenManager {
       if (existingTokens) {
         // Use token rotation helper for rotation data
         const rotationData = tokenRotation.prepareRotationData(existingTokens, {
-          access_token: encryptedAccessToken,
-          refresh_token: encryptedRefreshToken,
+          encrypted_access_token: encryptedAccessToken,
+          encrypted_refresh_token: encryptedRefreshToken,
           expires_at: expiresAt,
           scope: tokens.scope
         });
@@ -46,8 +46,8 @@ class TokenManager {
         // Create new token record
         await db.insert('oauth_tokens', {
           user_id: userId,
-          access_token: encryptedAccessToken,
-          refresh_token: encryptedRefreshToken,
+          encrypted_access_token: encryptedAccessToken,
+          encrypted_refresh_token: encryptedRefreshToken,
           expires_at: expiresAt,
           scope: tokens.scope,
           token_version: 1,

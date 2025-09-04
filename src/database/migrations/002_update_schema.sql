@@ -6,8 +6,17 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'user';
 
 -- Update oauth_tokens table to match our implementation
 ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'spotify';
-ALTER TABLE oauth_tokens RENAME COLUMN access_token TO encrypted_access_token;
-ALTER TABLE oauth_tokens RENAME COLUMN refresh_token TO encrypted_refresh_token;
+DO $$ 
+BEGIN
+    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='oauth_tokens' AND column_name='access_token') THEN
+        ALTER TABLE oauth_tokens RENAME COLUMN access_token TO encrypted_access_token;
+    END IF;
+    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='oauth_tokens' AND column_name='refresh_token') THEN
+        ALTER TABLE oauth_tokens RENAME COLUMN refresh_token TO encrypted_refresh_token;
+    END IF;
+END $$;
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS encrypted_access_token TEXT;
+ALTER TABLE oauth_tokens ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT;
 
 -- Drop the old follows table and recreate with correct structure
 DROP TABLE IF EXISTS follows CASCADE;
@@ -23,11 +32,21 @@ CREATE TABLE follows (
 );
 
 -- Update queue_jobs table to match our implementation
-ALTER TABLE queue_jobs RENAME COLUMN scheduled_for TO scheduled_at;
+-- Check if columns exist before renaming
+DO $$ 
+BEGIN
+    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='queue_jobs' AND column_name='scheduled_for') THEN
+        ALTER TABLE queue_jobs RENAME COLUMN scheduled_for TO scheduled_at;
+    END IF;
+    IF EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='queue_jobs' AND column_name='failed_at') THEN
+        ALTER TABLE queue_jobs RENAME COLUMN failed_at TO updated_at;
+    END IF;
+END $$;
+ALTER TABLE queue_jobs ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP;
 ALTER TABLE queue_jobs ADD COLUMN IF NOT EXISTS queue_job_id VARCHAR(255);
 ALTER TABLE queue_jobs ADD COLUMN IF NOT EXISTS result JSONB;
 ALTER TABLE queue_jobs ADD COLUMN IF NOT EXISTS last_error TEXT;
-ALTER TABLE queue_jobs RENAME COLUMN failed_at TO updated_at;
+ALTER TABLE queue_jobs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP;
 
 -- User daily statistics table
 CREATE TABLE IF NOT EXISTS user_daily_stats (
