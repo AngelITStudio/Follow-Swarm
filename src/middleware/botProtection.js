@@ -13,6 +13,7 @@ const db = require('../database');
 /**
  * Rate limiter for signup/authentication attempts
  * Limits each IP to 3 signup attempts per 15 minutes
+ * Skips rate limiting for already authenticated users (re-auth scenarios)
  */
 const signupRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -20,6 +21,33 @@ const signupRateLimiter = rateLimit({
   message: 'Too many signup attempts from this IP, please try again later.',
   standardHeaders: true, // Return rate limit info in headers
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting if user is already authenticated (re-authentication)
+    // Check for session user or JWT token
+    if (req.session?.userId) {
+      logger.debug('Skipping signup rate limit for authenticated session user');
+      return true;
+    }
+    
+    // Check for JWT in Authorization header
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      try {
+        const jwt = require('jsonwebtoken');
+        const config = require('../../config');
+        const decoded = jwt.verify(token, config.security.jwtSecret);
+        if (decoded.userId) {
+          logger.debug('Skipping signup rate limit for JWT authenticated user');
+          return true;
+        }
+      } catch (error) {
+        // Invalid token, apply rate limiting
+      }
+    }
+    
+    return false;
+  },
   handler: (req, res) => {
     logger.warn('Rate limit exceeded for signup', {
       ip: req.ip,
@@ -36,13 +64,36 @@ const signupRateLimiter = rateLimit({
 /**
  * Rate limiter for OAuth callback attempts
  * Slightly more lenient as users might have connection issues
+ * Also skips authenticated users for re-auth scenarios
  */
 const oauthRateLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 5, // Limit each IP to 5 OAuth attempts
   message: 'Too many authentication attempts, please try again later.',
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for authenticated users (re-authentication)
+    if (req.session?.userId) {
+      return true;
+    }
+    
+    // Check for JWT token
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      try {
+        const jwt = require('jsonwebtoken');
+        const config = require('../../config');
+        const token = authHeader.substring(7);
+        const decoded = jwt.verify(token, config.security.jwtSecret);
+        return !!decoded.userId;
+      } catch (error) {
+        // Invalid token, apply rate limiting
+      }
+    }
+    
+    return false;
+  }
 });
 
 /**
