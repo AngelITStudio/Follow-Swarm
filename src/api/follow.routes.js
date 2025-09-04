@@ -12,6 +12,8 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth, checkSubscription } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/scopeValidation');
+const { followRateLimiter, perUserRateLimiter, addRateLimitHeaders } = require('../middleware/rateLimiter');
 const followEngine = require('../services/followEngine');
 const queueManager = require('../services/queueManager');
 const logger = require('../utils/logger');
@@ -49,7 +51,7 @@ router.get('/rate-limits', requireAuth, async (req, res) => {
  * GET /api/follows/suggestions
  * Get suggested artists to follow
  */
-router.get('/suggestions', requireAuth, async (req, res) => {
+router.get('/suggestions', requireAuth, requireFeature('follow'), async (req, res) => {
   try {
     const userId = req.user.id;
     const limit = parseInt(req.query.limit) || 10;
@@ -73,7 +75,7 @@ router.get('/suggestions', requireAuth, async (req, res) => {
  * POST /api/follows/single
  * Follow a single artist immediately
  */
-router.post('/single', requireAuth, async (req, res) => {
+router.post('/single', requireAuth, requireFeature('follow'), followRateLimiter, addRateLimitHeaders, async (req, res) => {
   try {
     const userId = req.user.id;
     const { artistId } = req.body;
@@ -124,7 +126,7 @@ router.post('/single', requireAuth, async (req, res) => {
  * POST /api/follows/batch
  * Queue multiple artists to follow
  */
-router.post('/batch', requireAuth, checkSubscription(['pro', 'premium']), async (req, res) => {
+router.post('/batch', requireAuth, requireFeature('follow'), checkSubscription(['pro', 'premium']), followRateLimiter, addRateLimitHeaders, async (req, res) => {
   try {
     const userId = req.user.id;
     const { artistIds, options = {} } = req.body;
@@ -167,7 +169,7 @@ router.post('/batch', requireAuth, checkSubscription(['pro', 'premium']), async 
  * POST /api/follows/schedule
  * Schedule follows with custom timing
  */
-router.post('/schedule', requireAuth, checkSubscription(['premium']), async (req, res) => {
+router.post('/schedule', requireAuth, requireFeature('follow'), checkSubscription(['premium']), perUserRateLimiter, addRateLimitHeaders, async (req, res) => {
   try {
     const userId = req.user.id;
     const { artistIds, startTime, endTime, distribution = 'even' } = req.body;

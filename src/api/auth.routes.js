@@ -90,6 +90,26 @@ router.get('/callback', oauthRateLimiter, detectBot, async (req, res) => {
     // Exchange code for tokens
     const tokens = await spotifyAuth.exchangeCodeForTokens(code);
     
+    // Validate OAuth scopes
+    const { validateCallbackScopes } = require('../middleware/scopeValidation');
+    const scopeValidation = validateCallbackScopes(tokens.scope || '');
+    
+    if (!scopeValidation.valid) {
+      logger.warn('OAuth callback missing required scopes', {
+        missing: scopeValidation.missing
+      });
+      return res.status(400).json({
+        error: 'Insufficient permissions',
+        message: scopeValidation.message,
+        missingScopes: scopeValidation.missing
+      });
+    }
+    
+    logger.info('OAuth scopes validated successfully', {
+      granted: scopeValidation.granted.length,
+      optional: scopeValidation.optional.length
+    });
+    
     // Get user profile from Spotify
     const profile = await spotifyAuth.getUserProfile(tokens.accessToken);
     
@@ -162,6 +182,10 @@ router.get('/callback', oauthRateLimiter, detectBot, async (req, res) => {
     
     logger.info(`User ${user.spotify_id} logged in successfully`);
     
+    // Check if 2FA is required
+    const twoFactorAuth = require('../auth/twoFactorAuth');
+    const requires2FA = await twoFactorAuth.is2FARequired(user.id);
+    
     // Generate API token
     const apiToken = generateApiToken(user.id);
     
@@ -170,9 +194,21 @@ router.get('/callback', oauthRateLimiter, detectBot, async (req, res) => {
       ? 'https://spotifyswarm.com' 
       : 'http://localhost:5173';
     
-    // Send HTML that redirects to frontend with token
-    // Using HTML redirect to avoid cross-origin issues between tunnel and localhost
-    const redirectUrl = `${frontendUrl}/auth/success?token=${encodeURIComponent(apiToken)}&userId=${encodeURIComponent(user.id)}`;
+    // Determine redirect based on 2FA requirement
+    let redirectUrl;
+    if (requires2FA && user.two_fa_enabled) {
+      // Only redirect to 2FA page if user has already set it up
+      // TODO: Create frontend 2FA page
+      redirectUrl = `${frontendUrl}/auth/2fa?tempToken=${encodeURIComponent(apiToken)}&userId=${encodeURIComponent(user.id)}`;
+      logger.info(`User requires 2FA verification`);
+    } else {
+      // For now, redirect to success even for admins who haven't set up 2FA yet
+      // TODO: Add 2FA setup flow in frontend
+      if (requires2FA && !user.two_fa_enabled) {
+        logger.warn(`Admin user ${user.id} should set up 2FA`);
+      }
+      redirectUrl = `${frontendUrl}/auth/success?token=${encodeURIComponent(apiToken)}&userId=${encodeURIComponent(user.id)}`;
+    }
     logger.info(`Redirecting to: ${redirectUrl}`);
     
     res.send(`

@@ -34,12 +34,16 @@ class SpotifyAuth {
   /**
    * Generate authorization URL for OAuth flow
    * @param {string} state - State parameter for CSRF protection
+   * @param {string[]} additionalScopes - Additional scopes to request
    * @returns {string} Authorization URL
    */
-  getAuthorizationUrl(state) {
-    const scopes = config.spotify.scopes;
+  getAuthorizationUrl(state, additionalScopes = []) {
+    // Use scope validation to get proper scopes
+    const { getAllRequiredScopes } = require('../middleware/scopeValidation');
+    const scopes = [...getAllRequiredScopes(), ...additionalScopes];
+    
     logger.info(`Creating auth URL with redirect URI: ${config.spotify.redirectUri}`);
-    logger.info(`Redirect URI type: ${typeof config.spotify.redirectUri}`);
+    logger.info(`Requesting scopes: ${scopes.join(', ')}`);
     return this.spotifyApi.createAuthorizeURL(scopes, state);
   }
 
@@ -205,7 +209,7 @@ class SpotifyAuth {
       // Check if token is still valid
       if (new Date(tokenRecord.expires_at) > new Date(Date.now() + 60000)) {
         // Token is valid (with 1 minute buffer for safety)
-        const decryptedToken = encryption.decrypt(tokenRecord.access_token);
+        const decryptedToken = encryption.decrypt(tokenRecord.encrypted_access_token);
         
         // Re-cache the valid token
         await redis.cacheToken(userId, {
@@ -217,7 +221,7 @@ class SpotifyAuth {
       }
       
       // Token expired, use refresh token to get new access token with rotation
-      const decryptedRefreshToken = encryption.decrypt(tokenRecord.refresh_token);
+      const decryptedRefreshToken = encryption.decrypt(tokenRecord.encrypted_refresh_token);
       const newTokens = await this.refreshAccessToken(decryptedRefreshToken, userId);
       
       // Save new tokens (including rotated refresh token if provided)
