@@ -83,14 +83,15 @@ class SpotifyAuth {
       
       const result = {
         accessToken: data.body['access_token'],
-        expiresIn: data.body['expires_in'],
-        refreshToken: data.body['refresh_token'] || refreshToken // Spotify may return new refresh token
+        expiresIn: data.body['expires_in']
       };
       
-      // Track refresh if userId provided (for rotation tracking)
-      if (userId && data.body['refresh_token']) {
-        logger.info(`Refresh token rotated for user: ${userId}`);
-        await tokenRotation.trackTokenRefresh(userId, 'rotation');
+      if (data.body['refresh_token']) {
+        result.refreshToken = data.body['refresh_token'];
+        if (userId) {
+          logger.info(`Refresh token rotated for user: ${userId}`);
+          await tokenRotation.trackTokenRefresh(userId, 'rotation');
+        }
       }
       
       return result;
@@ -222,16 +223,22 @@ class SpotifyAuth {
       
       // Token expired, use refresh token to get new access token with rotation
       const decryptedRefreshToken = encryption.decrypt(tokenRecord.encrypted_refresh_token);
-      const newTokens = await this.refreshAccessToken(decryptedRefreshToken, userId);
-      
+      const newTokens = await this.refreshAccessToken(decryptedRefreshToken);
+
+      if (newTokens.refreshToken && userId) {
+        await tokenRotation.trackTokenRefresh(userId, 'rotation');
+      }
+
       // Save new tokens (including rotated refresh token if provided)
+      const refreshTokenToStore = newTokens.refreshToken || decryptedRefreshToken;
+
       await this.saveTokens(userId, {
         accessToken: newTokens.accessToken,
-        refreshToken: newTokens.refreshToken, // May be rotated
+        refreshToken: refreshTokenToStore, // May be rotated
         expiresIn: newTokens.expiresIn,
         scope: tokenRecord.scope
       });
-      
+
       return newTokens.accessToken;
     } catch (error) {
       logger.error('Failed to get valid access token:', error);

@@ -10,6 +10,12 @@ const api = axios.create({
   },
 });
 
+const withAuthOverride = (authToken?: string) => (
+  authToken
+    ? { headers: { Authorization: `Bearer ${authToken}` } }
+    : {}
+);
+
 // Request interceptor for auth token
 api.interceptors.request.use(
   (config) => {
@@ -114,6 +120,14 @@ export const adminAPI = {
   deleteUser: (id: string) => api.delete(`/api/admin/users/${id}`),
   suspendUser: (id: string, data: any) => api.post(`/api/admin/users/${id}/suspend`, data),
   getActivity: (limit?: number) => api.get('/api/admin/activity', { params: { limit } })
+};
+
+export const twoFactorAPI = {
+  verify: (payload: { userId: string; token: string }, authToken?: string) =>
+    api.post('/api/2fa/verify', payload, withAuthOverride(authToken)),
+  verifyBackup: (payload: { userId: string; code: string }, authToken?: string) =>
+    api.post('/api/2fa/verify-backup', payload, withAuthOverride(authToken)),
+  status: () => api.get('/api/2fa/status'),
 };
 
 export default api;

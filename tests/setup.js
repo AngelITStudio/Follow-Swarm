@@ -260,7 +260,7 @@ jest.mock('../src/database', () => ({
       
       for (const [key, job] of mockQueueJobs.entries()) {
         if ((job.user_id === userId || job.user_id === userId?.toString()) &&
-            (job.status === 'scheduled' || job.status === 'rescheduled')) {
+            (job.status === 'scheduled' || job.status === 'rescheduled' || job.status === 'queued')) {
           job.status = 'cancelled';
           job.completed_at = new Date();
           cancelledJobs.push({ ...job });
@@ -610,19 +610,54 @@ jest.mock('../src/database', () => ({
 }));
 
 // Mock Bot Protection Middleware
-jest.mock('../src/middleware/botProtection', () => ({
-  signupRateLimiter: (req, res, next) => next(),
-  trackSignupBehavior: (req, res, next) => next(),
-  checkSuspiciousIP: (req, res, next) => next(),
-  detectBot: (req, res, next) => next(),
-  oauthRateLimiter: (req, res, next) => next(),
-  apiRateLimiter: (req, res, next) => next(),
-  checkHoneypot: (req, res, next) => next(),
-  verifySpotifyAccount: jest.fn().mockResolvedValue(0.1),
-  analyzeSignupBehavior: jest.fn().mockReturnValue(0.1),
-  logSuspiciousActivity: jest.fn().mockResolvedValue(undefined),
-  initializeBotProtection: jest.fn().mockResolvedValue(undefined)
-}));
+jest.mock('../src/middleware/botProtection', () => {
+  const actual = jest.requireActual('../src/middleware/botProtection');
+
+  return {
+    ...actual,
+    signupRateLimiter: (req, res, next) => next(),
+    oauthRateLimiter: (req, res, next) => next(),
+    apiRateLimiter: (req, res, next) => next(),
+    checkHoneypot: (req, res, next) => {
+      const body = req.body || {};
+      const honeypotFields = ['website', 'url', 'company', 'fax', 'phone_number'];
+
+      for (const field of honeypotFields) {
+        if (body[field]) {
+          return res.status(400).json({ error: 'Invalid request' });
+        }
+      }
+      next();
+    },
+    trackSignupBehavior: (req, res, next) => {
+      if (!req.session.signupMetrics) {
+        req.session.signupMetrics = {
+          pageLoadTime: Date.now(),
+          interactionCount: 0,
+          mouseEvents: 0,
+          keyboardEvents: 0,
+          focusEvents: 0
+        };
+      }
+
+      if (req.body && req.body._metrics) {
+        const metrics = req.body._metrics;
+        req.session.signupMetrics.mouseEvents = metrics.mouseEvents || 0;
+        req.session.signupMetrics.keyboardEvents = metrics.keyboardEvents || 0;
+        req.session.signupMetrics.focusEvents = metrics.focusEvents || 0;
+        req.session.signupMetrics.interactionCount += 1;
+        delete req.body._metrics;
+      }
+      next();
+    },
+    checkSuspiciousIP: (req, res, next) => next(),
+    detectBot: (req, res, next) => next(),
+    verifySpotifyAccount: jest.fn().mockResolvedValue(0.1),
+    analyzeSignupBehavior: actual.analyzeSignupBehavior,
+    logSuspiciousActivity: jest.fn().mockResolvedValue(undefined),
+    initializeBotProtection: jest.fn().mockResolvedValue(undefined)
+  };
+});
 
 // Mock Queue Manager in test environment
 const mockQueueManager = {

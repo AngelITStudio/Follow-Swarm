@@ -84,7 +84,7 @@ class TokenRotation {
       token_version: (existingTokens.token_version || 0) + 1,
       last_refreshed_at: new Date(),
       refresh_count: (existingTokens.refresh_count || 0) + 1,
-      previous_refresh_token: existingTokens.refresh_token
+      previous_refresh_token: existingTokens.encrypted_refresh_token
     };
   }
 }

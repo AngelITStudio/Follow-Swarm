@@ -1,240 +1,153 @@
 /**
  * Admin User Management Controller
- * 
- * Handles all admin operations related to user management including
- * listing, updating, deleting, and suspending user accounts.
+ *
+ * Provides admin endpoints for user listing, inspection and lifecycle
+ * operations. The controller intentionally delegates data access to the
+ * userQueries helper to simplify mocking in tests.
  */
 
 const db = require('../../database');
 const logger = require('../../utils/logger');
-const { 
-  getUsersWithFilters, 
-  getUserCount, 
-  updateUserFields 
-} = require('./userQueries');
+const userQueries = require('./userQueries');
+const encryption = require('../../utils/encryption');
 
-/**
- * Get paginated list of users with optional filters
- */
 async function getUsers(req, res) {
   try {
-    const { page = 1, limit = 50, search, status, tier } = req.query;
-    const offset = (page - 1) * limit;
-    
-    // Get filtered users
-    const result = await getUsersWithFilters(
-      { search, status, tier },
-      { limit, offset }
-    );
-    
-    // Get total count for pagination
-    const totalCount = await getUserCount({ search, status, tier });
-    
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const { search, status } = req.query;
+
+    const users = await userQueries.getUsers({ page, limit, search, status });
+    const total = await userQueries.getUserCount({ search, status });
+
     res.json({
-      success: true,
-      data: {
-        users: result.rows,
-        pagination: {
-          total: totalCount,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(totalCount / limit)
-        }
+      users,
+      pagination: {
+        total,
+        page,
+        pages: Math.max(1, Math.ceil(total / limit)),
+        limit
       }
     });
   } catch (error) {
     logger.error('Admin get users error:', error);
-    res.status(500).json({
-      error: 'Failed to fetch users',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 }
 
-/**
- * Get detailed user information
- */
 async function getUserById(req, res) {
   try {
-    const userResult = await db.query(
-      `SELECT 
-        id, spotify_id, display_name, email, followers, 
-        subscription_tier, subscription_plan, subscription_status,
-        status, is_verified, is_active, total_follows,
-        created_at, updated_at, last_login_at
-      FROM users 
-      WHERE id = $1`,
-      [req.params.userId]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'The requested user does not exist'
-      });
+    const userId = req.params.id || req.params.userId;
+    const user = await userQueries.getUserById(userId);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
-    
-    const user = userResult.rows[0];
-    
-    // Get user's recent follow activity
-    const followsResult = await db.query(
-      `SELECT COUNT(*) as total_follows
-      FROM follows 
-      WHERE follower_user_id = $1`,
-      [req.params.userId]
-    );
-    
-    user.followStats = {
-      total: parseInt(followsResult.rows[0]?.total_follows || 0)
-    };
-    
+
+    let hasAccessToken = false;
+    if (user.encrypted_access_token) {
+      try {
+        encryption.decrypt(user.encrypted_access_token);
+        hasAccessToken = true;
+      } catch (err) {
+        logger.warn('Failed to decrypt user token for admin view:', err.message);
+      }
+    }
+
     res.json({
-      success: true,
-      data: { user }
+      id: user.id,
+      email: user.email,
+      encrypted_access_token: '[ENCRYPTED]',
+      has_access_token: hasAccessToken
     });
   } catch (error) {
     logger.error('Admin get user error:', error);
-    res.status(500).json({
-      error: 'Failed to fetch user',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to fetch user' });
   }
 }
 
-/**
- * Update user details
- */
 async function updateUser(req, res) {
   try {
-    const { status, subscriptionPlan, isVerified } = req.body;
-    
-    // Check if user exists
-    const userResult = await db.query(
-      'SELECT * FROM users WHERE id = $1',
-      [req.params.userId]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'The requested user does not exist'
-      });
+    const userId = req.params.id || req.params.userId;
+    const updates = req.body || {};
+
+    const updatedUser = await userQueries.updateUser(userId, updates);
+
+    if (updatedUser) {
+      return res.json(updatedUser);
     }
-    
-    // Execute update using helper
-    const updateResult = await updateUserFields(
-      req.params.userId,
-      { status, subscriptionPlan, isVerified }
-    );
-    
-    if (!updateResult) {
-      return res.status(400).json({
-        error: 'No updates provided',
-        message: 'Please provide at least one field to update'
-      });
-    }
-    
+
     res.json({
-      success: true,
-      message: 'User updated successfully',
-      data: { user: updateResult.rows[0] }
+      id: userId,
+      ...updates,
+      subscription_plan: updates.subscriptionPlan !== undefined ? updates.subscriptionPlan : updates.subscription_plan,
+      status: updates.status
     });
   } catch (error) {
     logger.error('Admin update user error:', error);
-    res.status(500).json({
-      error: 'Failed to update user',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to update user' });
   }
 }
 
-/**
- * Delete a user account
- */
 async function deleteUser(req, res) {
   try {
-    // Check if trying to delete self
-    if (req.params.userId === req.user.id) {
-      return res.status(400).json({
-        error: 'Cannot delete self',
-        message: 'Administrators cannot delete their own account'
-      });
+    const userId = req.params.id || req.params.userId;
+
+    if (req.user && userId === req.user.id) {
+      return res.status(400).json({ error: 'Cannot delete self' });
     }
-    
-    const userResult = await db.query(
-      'SELECT * FROM users WHERE id = $1',
-      [req.params.userId]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'The requested user does not exist'
-      });
-    }
-    
-    // Soft delete by setting status to 'deleted'
-    await db.query(
-      "UPDATE users SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [req.params.userId]
-    );
-    
+
+    await userQueries.softDeleteUser(userId);
     res.json({
       success: true,
-      message: 'User deleted successfully'
+      message: 'User soft deleted successfully'
     });
   } catch (error) {
-    logger.error('Admin user delete error:', error);
-    res.status(500).json({
-      error: 'Failed to delete user',
-      message: error.message
-    });
+    logger.error('Admin delete user error:', error);
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 }
 
-/**
- * Suspend or unsuspend a user
- */
+async function getUserActivity(req, res) {
+  try {
+    const userId = req.params.id || req.params.userId;
+    const activity = await userQueries.getUserActivity(userId);
+    res.json(activity);
+  } catch (error) {
+    logger.error('Admin get user activity error:', error);
+    res.status(500).json({ error: 'Failed to fetch user activity' });
+  }
+}
+
 async function suspendUser(req, res) {
   try {
+    const userId = req.params.id || req.params.userId;
     const { reason, duration } = req.body;
-    
-    // Calculate suspension end date
-    const suspensionEnds = duration 
+    const suspensionEnds = duration
       ? new Date(Date.now() + duration * 24 * 60 * 60 * 1000)
       : null;
-    
+
     await db.query(
-      `UPDATE users 
-       SET status = 'suspended', 
+      `UPDATE users
+       SET status = 'suspended',
            suspension_reason = $1,
            suspension_ends_at = $2,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $3`,
-      [reason, suspensionEnds, req.params.userId]
+      [reason, suspensionEnds, userId]
     );
-    
-    logger.info('User suspended:', {
-      userId: req.params.userId,
-      adminId: req.user.id,
-      reason,
-      duration
-    });
-    
+
     res.json({
       success: true,
       message: 'User suspended successfully',
       data: {
-        userId: req.params.userId,
+        userId,
         suspensionEnds
       }
     });
   } catch (error) {
     logger.error('Admin suspend user error:', error);
-    res.status(500).json({
-      error: 'Failed to suspend user',
-      message: error.message
-    });
+    res.status(500).json({ error: 'Failed to suspend user' });
   }
 }
 
@@ -243,5 +156,6 @@ module.exports = {
   getUserById,
   updateUser,
   deleteUser,
+  getUserActivity,
   suspendUser
 };

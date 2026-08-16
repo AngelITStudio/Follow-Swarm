@@ -11,6 +11,7 @@ import History from './pages/History';
 import Settings from './pages/Settings';
 import Callback from './pages/Callback';
 import AuthSuccess from './pages/AuthSuccess';
+import TwoFactor from './pages/TwoFactor';
 import CommunityGrowth from './pages/marketing/CommunityGrowth';
 import SmartTargeting from './pages/marketing/SmartTargeting';
 import SafeCompliant from './pages/marketing/SafeCompliant';
@@ -77,6 +78,7 @@ function App() {
           } />
           <Route path="/auth/callback" element={<Callback />} />
           <Route path="/auth/success" element={<AuthSuccess />} />
+          <Route path="/auth/2fa" element={<TwoFactor />} />
           
           {/* Marketing pages (public) */}
           <Route path="/features/community-growth" element={<CommunityGrowth />} />

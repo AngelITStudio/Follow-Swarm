@@ -24,6 +24,7 @@ describe('Authentication Routes', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    spotifyAuth.getAuthorizationUrl = jest.fn().mockImplementation((state) => `https://accounts.spotify.com/authorize?state=${state}`);
   });
 
   describe('GET /auth/login', () => {

@@ -53,16 +53,17 @@ router.get('/status', isAuthenticated, async (req, res) => {
  * @desc Extend current session timeout
  * @access Private
  */
-router.post('/extend', isAuthenticated, (req, res) => {
+router.post('/extend', isAuthenticated, async (req, res) => {
   try {
     const extended = extendSession(req);
     
     if (extended) {
       logger.info(`Session extended for user ${req.user.id}`);
+      const sessionStatus = await getSessionStatus(req);
       res.json({
         success: true,
         message: 'Session extended successfully',
-        session: getSessionStatus(req)
+        session: sessionStatus
       });
     } else {
       res.status(400).json({
@@ -83,10 +84,10 @@ router.post('/extend', isAuthenticated, (req, res) => {
  * @desc Keep session alive (called by frontend periodically)
  * @access Private
  */
-router.post('/keepalive', isAuthenticated, (req, res) => {
+router.post('/keepalive', isAuthenticated, async (req, res) => {
   try {
     // Simply accessing with sessionTimeoutMiddleware updates lastActivity
-    const status = getSessionStatus(req);
+    const status = await getSessionStatus(req);
     
     res.json({
       success: true,

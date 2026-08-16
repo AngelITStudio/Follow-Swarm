@@ -135,8 +135,66 @@ async function updateUserFields(userId, updates) {
   );
 }
 
+async function getUsers(params) {
+  const { page = 1, limit = 20, search, status } = params;
+  const offset = (page - 1) * limit;
+  const result = await getUsersWithFilters({ search, status }, { limit, offset });
+  return result.rows;
+}
+
+async function getUserById(userId) {
+  const result = await db.query(
+    'SELECT id, email, encrypted_access_token FROM users WHERE id = $1',
+    [userId]
+  );
+  return result.rows[0] || null;
+}
+
+async function updateUser(userId, updates) {
+  const result = await updateUserFields(userId, updates);
+  return result ? result.rows[0] : null;
+}
+
+async function softDeleteUser(userId) {
+  const result = await db.query(
+    "UPDATE users SET status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, updated_at",
+    [userId]
+  );
+  return result.rows[0] || null;
+}
+
+async function getUserActivity(userId) {
+  const follows = await db.query(
+    `SELECT id, target_artist_id, status, created_at
+     FROM follows
+     WHERE follower_user_id = $1
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [userId]
+  );
+
+  const analytics = await db.query(
+    `SELECT id, event_type, event_category, created_at
+     FROM analytics
+     WHERE user_id = $1
+     ORDER BY created_at DESC
+     LIMIT 20`,
+    [userId]
+  );
+
+  return {
+    recentFollows: follows.rows,
+    recentAnalytics: analytics.rows
+  };
+}
+
 module.exports = {
   getUsersWithFilters,
   getUserCount,
-  updateUserFields
+  updateUserFields,
+  getUsers,
+  getUserById,
+  updateUser,
+  softDeleteUser,
+  getUserActivity
 };

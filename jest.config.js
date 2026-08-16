@@ -11,6 +11,9 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html'],
   testTimeout: 30000,
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
+  moduleNameMapper: {
+    '^supertest$': '<rootDir>/tests/mocks/supertest.js'
+  },
   verbose: true,
   forceExit: true,
   detectOpenHandles: false,

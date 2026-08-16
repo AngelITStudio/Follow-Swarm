@@ -18,6 +18,26 @@ const usersController = require('../controllers/admin/adminUsers.controller');
 const statsController = require('../controllers/admin/adminStats.controller');
 const systemController = require('../controllers/admin/adminSystem.controller');
 
+function withSuccessResponse(handler, transform = (payload) => ({ success: true, data: payload })) {
+  return async (req, res, next) => {
+    const originalJson = res.json.bind(res);
+    res.json = (payload) => {
+      res.json = originalJson;
+      if (res.statusCode >= 400) {
+        return originalJson(payload);
+      }
+      return originalJson(transform(payload));
+    };
+
+    try {
+      await handler(req, res, next);
+    } catch (error) {
+      res.json = originalJson;
+      return next(error);
+    }
+  };
+}
+
 // Debug logging for all admin routes
 router.use((req, res, next) => {
   logger.info(`[ADMIN ROUTE] ${req.method} ${req.originalUrl}`);
@@ -52,9 +72,9 @@ router.get('/activity', statsController.getActivity);
 /**
  * User Management Routes
  */
-router.get('/users', usersController.getUsers);
-router.get('/users/:userId', usersController.getUserById);
-router.put('/users/:userId', usersController.updateUser);
+router.get('/users', withSuccessResponse(usersController.getUsers));
+router.get('/users/:userId', withSuccessResponse(usersController.getUserById));
+router.put('/users/:userId', withSuccessResponse(usersController.updateUser, (payload) => ({ success: true, data: { user: payload } })));
 router.delete('/users/:userId', usersController.deleteUser);
 router.post('/users/:userId/suspend', usersController.suspendUser);
 

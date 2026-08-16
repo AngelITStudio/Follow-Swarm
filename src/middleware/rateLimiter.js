@@ -10,8 +10,52 @@
 
 const rateLimit = require('express-rate-limit');
 const { RedisStore } = require('rate-limit-redis');
+const Redis = require('ioredis');
+const config = require('../../config');
 const redis = require('../database/redis');
 const logger = require('../utils/logger');
+
+const isTestEnv = process.env.NODE_ENV === 'test';
+const shouldUseRedisStore = !isTestEnv && process.env.ENABLE_REDIS_RATE_LIMIT === 'true';
+
+let rateLimitStore;
+let rateLimitRedisClient;
+
+if (shouldUseRedisStore) {
+  try {
+    const redisConfig = {
+      host: config.redis.host,
+      port: config.redis.port,
+      password: config.redis.password,
+      retryStrategy: config.redis.retryStrategy,
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: 3
+    };
+
+    rateLimitRedisClient = new Redis(redisConfig);
+    rateLimitRedisClient.on('error', (error) => {
+      logger.error('Rate limit Redis client error:', error);
+    });
+
+    rateLimitStore = new RedisStore({
+      sendCommand: (...args) => rateLimitRedisClient.call(...args),
+      prefix: 'ratelimit:'
+    });
+  } catch (error) {
+    logger.error('Failed to initialize Redis rate limit store, falling back to in-memory store:', error);
+    rateLimitStore = null;
+  }
+
+  process.on('exit', () => {
+    if (rateLimitRedisClient) {
+      rateLimitRedisClient.quit().catch((error) => {
+        logger.debug('Failed to close rate limit Redis client on exit:', error.message);
+      });
+    }
+  });
+} else if (!isTestEnv) {
+  logger.debug('Redis-backed rate limiting disabled. Set ENABLE_REDIS_RATE_LIMIT=true to enable shared counters.');
+}
 
 /**
  * Rate limit configurations per endpoint type
@@ -60,58 +104,66 @@ const rateLimitConfigs = {
   }
 };
 
-/**
- * Create a rate limiter (using memory store for now)
- */
-function createRateLimiter(config, keyGenerator) {
-  return rateLimit({
-    // TODO: Fix Redis store compatibility
-    // store: new RedisStore({
-    //   client: redis.client,
-    //   prefix: 'ratelimit:',
-    // }),
-    ...config,
-    keyGenerator: keyGenerator || ((req) => {
-      // Default: Use IP address or user ID if authenticated
-      return req.user?.id || req.ip;
-    }),
-    standardHeaders: true, // Return rate limit info in headers
-    legacyHeaders: false,
-    handler: (req, res) => {
-      logger.warn('Rate limit exceeded', {
-        ip: req.ip,
-        userId: req.user?.id,
-        path: req.path
-      });
-      
-      res.status(429).json({
-        error: 'Too Many Requests',
-        message: config.message,
-        retryAfter: res.getHeader('Retry-After')
-      });
+const limiterCache = new Map();
+const defaultKeyGenerator = (req) => req.user?.id || req.ip;
+
+function buildRateLimiter(cacheKey, config, keyGenerator = defaultKeyGenerator) {
+  if (!limiterCache.has(cacheKey)) {
+    const limiterOptions = {
+      ...config,
+      keyGenerator,
+      standardHeaders: true,
+      legacyHeaders: false,
+      handler: (req, res) => {
+        const responseMessage = config.message || 'Too many requests. Please try again later.';
+
+        logger.warn('Rate limit exceeded', {
+          ip: req.ip,
+          userId: req.user?.id,
+          path: req.path
+        });
+
+        res.status(429).json({
+          error: 'Too Many Requests',
+          message: responseMessage,
+          retryAfter: res.getHeader('Retry-After')
+        });
+      }
+    };
+
+    if (rateLimitStore) {
+      limiterOptions.store = rateLimitStore;
     }
-  });
+
+    limiterCache.set(cacheKey, rateLimit(limiterOptions));
+  }
+
+  return limiterCache.get(cacheKey);
 }
 
 /**
  * Per-user rate limiter (checks user subscription tier)
  */
-const perUserRateLimiter = async (req, res, next) => {
+const perUserLimiterByTier = {
+  free: buildRateLimiter('user:free', rateLimitConfigs.apiFree, (req) => `user:${req.user?.id}`),
+  pro: buildRateLimiter('user:pro', rateLimitConfigs.apiPremium, (req) => `user:${req.user?.id}`),
+  premium: buildRateLimiter('user:premium', rateLimitConfigs.apiPremium, (req) => `user:${req.user?.id}`)
+};
+
+const perUserRateLimiter = (req, res, next) => {
   if (!req.user) {
-    return next(); // Skip if not authenticated
+    return next();
   }
-  
+
   const tier = req.user.subscription_tier || 'free';
-  const config = tier === 'free' ? rateLimitConfigs.apiFree : rateLimitConfigs.apiPremium;
-  
-  const limiter = createRateLimiter(config, (req) => `user:${req.user.id}`);
+  const limiter = perUserLimiterByTier[tier] || perUserLimiterByTier.free;
   return limiter(req, res, next);
 };
 
 /**
  * Per-IP rate limiter
  */
-const perIpRateLimiter = createRateLimiter({
+const perIpRateLimiter = buildRateLimiter('ip', {
   windowMs: 60 * 1000, // 1 minute
   max: 60, // 60 requests per minute per IP
   message: 'Too many requests from this IP address.'
@@ -120,7 +172,8 @@ const perIpRateLimiter = createRateLimiter({
 /**
  * Auth rate limiter (strict for login/register)
  */
-const authRateLimiter = createRateLimiter(
+const authRateLimiter = buildRateLimiter(
+  'auth',
   rateLimitConfigs.auth,
   (req) => `auth:${req.ip}`
 );
@@ -128,7 +181,8 @@ const authRateLimiter = createRateLimiter(
 /**
  * Follow action rate limiter
  */
-const followRateLimiter = createRateLimiter(
+const followRateLimiter = buildRateLimiter(
+  'follow',
   rateLimitConfigs.followActions,
   (req) => `follow:${req.user?.id || req.ip}`
 );
@@ -136,7 +190,8 @@ const followRateLimiter = createRateLimiter(
 /**
  * 2FA verification rate limiter
  */
-const twoFactorRateLimiter = createRateLimiter(
+const twoFactorRateLimiter = buildRateLimiter(
+  '2fa',
   rateLimitConfigs.twoFactorVerify,
   (req) => {
     // Use userId from body since user might not be fully authenticated yet
@@ -148,7 +203,8 @@ const twoFactorRateLimiter = createRateLimiter(
 /**
  * Admin rate limiter
  */
-const adminRateLimiter = createRateLimiter(
+const adminRateLimiter = buildRateLimiter(
+  'admin',
   rateLimitConfigs.admin,
   (req) => `admin:${req.user?.id || req.ip}`
 );
@@ -164,7 +220,7 @@ const combinedRateLimiter = [perIpRateLimiter, perUserRateLimiter];
 function dynamicRateLimiter(type) {
   return (req, res, next) => {
     const config = rateLimitConfigs[type] || rateLimitConfigs.apiFree;
-    const limiter = createRateLimiter(config);
+    const limiter = buildRateLimiter(`dynamic:${type}`, config);
     return limiter(req, res, next);
   };
 }
@@ -172,7 +228,7 @@ function dynamicRateLimiter(type) {
 /**
  * Track rate limit usage for monitoring
  */
-async function getRateLimitStatus(userId, ip) {
+async function getRateLimitStatus(userId, ip, { userTier = 'free' } = {}) {
   try {
     const userKey = `ratelimit:user:${userId}`;
     const ipKey = `ratelimit:ip:${ip}`;
@@ -185,7 +241,7 @@ async function getRateLimitStatus(userId, ip) {
     return {
       user: {
         count: parseInt(userCount) || 0,
-        limit: req.user?.subscription_tier === 'premium' ? 100 : 30
+        limit: userTier === 'premium' ? 100 : 30
       },
       ip: {
         count: parseInt(ipCount) || 0,

@@ -119,12 +119,15 @@ const apiRateLimiter = rateLimit({
 const checkHoneypot = (req, res, next) => {
   // Check for honeypot fields that should be empty
   const honeypotFields = ['website', 'url', 'company', 'fax', 'phone_number'];
-  
+  const body = req.body || {};
+  const bodyString = JSON.stringify(body).toLowerCase();
+
   for (const field of honeypotFields) {
-    if (req.body[field]) {
+    const value = body[field];
+    if ((Object.prototype.hasOwnProperty.call(body, field) && value) || bodyString.includes(`"${field.toLowerCase()}"`)) {
       logger.warn('Honeypot field triggered', {
         field,
-        value: req.body[field],
+        value,
         ip: req.ip,
         userAgent: req.headers['user-agent']
       });
@@ -158,14 +161,14 @@ const trackSignupBehavior = (req, res, next) => {
   // Track interaction events if sent from frontend
   if (req.body._metrics) {
     const metrics = req.body._metrics;
-    req.session.signupMetrics.mouseEvents += metrics.mouseEvents || 0;
-    req.session.signupMetrics.keyboardEvents += metrics.keyboardEvents || 0;
-    req.session.signupMetrics.focusEvents += metrics.focusEvents || 0;
-    req.session.signupMetrics.interactionCount++;
+    req.session.signupMetrics.mouseEvents = Number(metrics.mouseEvents || 0);
+    req.session.signupMetrics.keyboardEvents = Number(metrics.keyboardEvents || 0);
+    req.session.signupMetrics.focusEvents = Number(metrics.focusEvents || 0);
+    req.session.signupMetrics.interactionCount += 1;
     
-    // Remove metrics from body so it doesn't interfere with other processing
-    delete req.body._metrics;
-  }
+      // Remove metrics from body so it doesn't interfere with other processing
+      delete req.body._metrics;
+    }
   
   next();
 };
@@ -182,17 +185,27 @@ const analyzeSignupBehavior = (req) => {
   const riskFactors = [];
   
   // Time-based analysis
-  if (timeSincePageLoad < 3000) {
+  if (timeSincePageLoad < 1000) {
+    riskFactors.push(0.5);
+  } else if (timeSincePageLoad < 3000) {
     riskFactors.push(0.3); // Very fast submission
   } else if (timeSincePageLoad < 5000) {
     riskFactors.push(0.1); // Fast submission
   }
   
   // Interaction analysis
+  if (metrics.mouseEvents < 5) {
+    riskFactors.push(0.2);
+  }
+
+  if (metrics.keyboardEvents < 2) {
+    riskFactors.push(0.2);
+  }
+
   if (metrics.mouseEvents === 0) {
     riskFactors.push(0.2); // No mouse movement
   }
-  
+
   if (metrics.keyboardEvents === 0) {
     riskFactors.push(0.2); // No keyboard activity
   }

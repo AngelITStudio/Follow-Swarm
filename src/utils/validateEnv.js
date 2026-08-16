@@ -30,6 +30,11 @@ const envSchema = {
     default: 'localhost',
     description: 'Server host'
   },
+  CORS_ALLOWED_ORIGINS: {
+    required: false,
+    type: 'url_list',
+    description: 'Comma-separated list of allowed CORS origins'
+  },
 
   // Spotify API (Required)
   SPOTIFY_CLIENT_ID: {
@@ -227,6 +232,14 @@ const envSchema = {
     default: 'info',
     values: ['error', 'warn', 'info', 'debug', 'verbose'],
     description: 'Logging level'
+  },
+
+  // Feature Flags
+  ENABLE_REDIS_RATE_LIMIT: {
+    required: false,
+    default: 'false',
+    values: ['true', 'false'],
+    description: 'Enable Redis-backed shared rate limiting'
   }
 };
 
@@ -271,6 +284,16 @@ const validators = {
   email_list: (value) => {
     const emails = value.split(',').map(e => e.trim());
     return emails.every(email => validators.email(email));
+  },
+
+  url_list: (value) => {
+    const urls = value.split(',').map(url => url.trim()).filter(Boolean);
+
+    if (urls.length === 0) {
+      return false;
+    }
+
+    return urls.every(url => validators.url(url));
   }
 };
 
@@ -359,7 +382,7 @@ function generateEnvTemplate() {
   template += '# Generated from environment schema\n\n';
   
   const categories = {
-    'Server Configuration': ['NODE_ENV', 'PORT', 'HOST'],
+    'Server Configuration': ['NODE_ENV', 'PORT', 'HOST', 'CORS_ALLOWED_ORIGINS'],
     'Spotify API (Required)': ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REDIRECT_URI'],
     'Database (Required)': ['DATABASE_URL', 'DATABASE_HOST', 'DATABASE_PORT', 'DATABASE_NAME', 'DATABASE_USER', 'DATABASE_PASSWORD'],
     'Redis Cache': ['REDIS_URL', 'REDIS_HOST', 'REDIS_PORT'],
@@ -369,7 +392,8 @@ function generateEnvTemplate() {
     'Admin': ['ADMIN_EMAILS'],
     'Payment (Optional)': ['STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY', 'STRIPE_WEBHOOK_SECRET'],
     'Email (Optional)': ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD', 'EMAIL_FROM'],
-    'Monitoring': ['SENTRY_DSN', 'LOG_LEVEL']
+    'Monitoring': ['SENTRY_DSN', 'LOG_LEVEL'],
+    'Feature Flags': ['ENABLE_REDIS_RATE_LIMIT']
   };
   
   for (const [category, keys] of Object.entries(categories)) {

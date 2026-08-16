@@ -48,10 +48,34 @@ app.use(helmet({
 /**
  * CORS Configuration
  */
+const allowedOrigins = Array.isArray(config.server.corsOrigin)
+  ? config.server.corsOrigin
+  : config.server.corsOrigin
+    ? [config.server.corsOrigin]
+    : [];
+
+if (config.server.env === 'production' && allowedOrigins.length === 0) {
+  logger.warn('No CORS allowed origins configured; cross-origin requests will be blocked until CORS_ALLOWED_ORIGINS is set.');
+}
+
 app.use(cors({
-  origin: config.server.env === 'production' 
-    ? config.server.corsOrigin 
-    : true,
+  origin: (origin, callback) => {
+    if (config.server.env !== 'production') {
+      return callback(null, true);
+    }
+
+    if (!origin) {
+      // Allow same-origin or non-browser requests
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    logger.warn('Blocked CORS request from unauthorized origin', { origin });
+    return callback(null, false);
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token']
@@ -106,8 +130,10 @@ const globalRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Apply rate limiting to all routes
-app.use('/api/', globalRateLimiter);
+// Apply rate limiting to all routes (skip during automated tests)
+if (process.env.NODE_ENV !== 'test') {
+  app.use('/api/', globalRateLimiter);
+}
 
 /**
  * Health Check Endpoint

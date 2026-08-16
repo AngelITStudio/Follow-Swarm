@@ -111,6 +111,16 @@ const logger = winston.createLogger({
   exitOnError: false // Don't exit on handled exceptions
 });
 
+logger.format.timestamp = true;
+
+if (process.env.NODE_ENV === 'test') {
+  logger.transports.forEach((transport) => {
+    if (transport instanceof winston.transports.Console) {
+      transport.silent = true;
+    }
+  });
+}
+
 /**
  * Stream adapter for Morgan HTTP request logging
  * Allows Express middleware to write HTTP logs through Winston
@@ -148,19 +158,16 @@ const sanitize = (data) => {
 /**
  * Enhanced logger methods with automatic sanitization
  */
-const enhancedLogger = {
-  ...logger,
-  
-  // Override methods to add sanitization
-  info: (message, meta) => logger.info(message, sanitize(meta)),
-  error: (message, meta) => logger.error(message, sanitize(meta)),
-  warn: (message, meta) => logger.warn(message, sanitize(meta)),
-  debug: (message, meta) => logger.debug(message, sanitize(meta)),
-  http: (message, meta) => logger.http(message, sanitize(meta)),
-  
-  // Keep stream for Morgan
-  stream: logger.stream
-};
+const originalInfo = logger.info.bind(logger);
+const originalError = logger.error.bind(logger);
+const originalWarn = logger.warn.bind(logger);
+const originalDebug = logger.debug.bind(logger);
+const originalHttp = logger.http.bind(logger);
 
-// Export enhanced logger for use throughout application
-module.exports = enhancedLogger;
+logger.info = (message, meta) => originalInfo(message, sanitize(meta));
+logger.error = (message, meta) => originalError(message, sanitize(meta));
+logger.warn = (message, meta) => originalWarn(message, sanitize(meta));
+logger.debug = (message, meta) => originalDebug(message, sanitize(meta));
+logger.http = (message, meta) => originalHttp(message, sanitize(meta));
+
+module.exports = logger;

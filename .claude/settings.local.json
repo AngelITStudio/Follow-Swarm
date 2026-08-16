@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(npm install)",
+      "Bash(npm run dev:*)",
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(curl:*)",
+      "Bash(npx localtunnel:*)",
+      "Bash(ngrok:*)",
+      "Bash(pkill:*)",
+      "Bash(lsof:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm test)",
+      "Bash(npm test:*)",
+      "Bash(tree:*)",
+      "Bash(kill:*)",
+      "Bash(psql:*)",
+      "Bash(timeout 30 npm test:*)",
+      "Bash(timeout 45 npm test:*)",
+      "Read(/usr/local/**)",
+      "Bash(cat:*)",
+      "Read(/Applications/**)",
+      "Bash(open:*)",
+      "Bash(git checkout:*)",
+      "Read(/private/tmp/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

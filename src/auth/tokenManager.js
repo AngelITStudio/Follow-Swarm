@@ -37,7 +37,9 @@ class TokenManager {
           encrypted_access_token: encryptedAccessToken,
           encrypted_refresh_token: encryptedRefreshToken,
           expires_at: expiresAt,
-          scope: tokens.scope
+          scope: tokens.scope,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken
         });
         
         // Update existing token record with rotation support
@@ -51,7 +53,9 @@ class TokenManager {
           expires_at: expiresAt,
           scope: tokens.scope,
           token_version: 1,
-          refresh_count: 0
+          refresh_count: 0,
+          access_token: encryptedAccessToken,
+          refresh_token: encryptedRefreshToken
         });
       }
       

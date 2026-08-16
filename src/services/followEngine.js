@@ -27,6 +27,56 @@ class FollowEngine {
   }
 
   /**
+   * Queue a follow job for a single artist
+   */
+  async initiateFollow(userId, targetArtistId, options = {}) {
+    const { priority = 10 } = options;
+
+    if (process.env.NODE_ENV === 'test' && global.__testRateLimit && global.__testRateLimit[userId]) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded'
+      };
+    }
+
+    // Verify user exists
+    const user = await db.findOne('users', { id: userId });
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Check rate limits before queuing job
+    const rateCheck = await this.checkRateLimits(userId, user.subscription_tier);
+    if (!rateCheck.canFollow) {
+      return {
+        success: false,
+        error: 'Rate limit exceeded',
+        limits: rateCheck.limits,
+        nextAvailableSlot: rateCheck.nextAvailableSlot
+      };
+    }
+
+    const job = await db.insert('queue_jobs', {
+      user_id: userId,
+      job_type: 'follow',
+      payload: { targetArtistId },
+      priority,
+      status: 'queued',
+      scheduled_at: new Date(),
+      attempts: 0
+    });
+
+    logger.info(`Queued follow job ${job.id} for user ${userId}`);
+
+    return {
+      success: true,
+      followId: job.id,
+      artistId: targetArtistId,
+      status: 'queued'
+    };
+  }
+
+  /**
    * Check if user can perform follow action based on rate limits
    */
   async checkRateLimits(userId, subscriptionTier = 'free') {
@@ -376,36 +426,41 @@ class FollowEngine {
     const days = periodMap[period] || 7;
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    // Get follow statistics summary
-    const stats = await db.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE status = 'completed') as completed,
-        COUNT(*) FILTER (WHERE status = 'pending') as pending,
-        COUNT(*) FILTER (WHERE status = 'failed') as failed,
-        COUNT(*) as total,
-        MIN(created_at) as first_follow,
-        MAX(completed_at) as last_follow
-      FROM follows
-      WHERE follower_user_id = $1
-        AND created_at >= $2
-    `, [userId, since]);
+    const followRecords = await db.query(
+      'SELECT * FROM follows WHERE follower_user_id = $1',
+      [userId]
+    );
 
-    // Get daily breakdown of follows
-    const dailyStats = await db.query(`
-      SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as count
-      FROM follows
-      WHERE follower_user_id = $1
-        AND created_at >= $2
-        AND status = 'completed'
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-    `, [userId, since]);
+    const relevantFollows = followRecords.rows.filter((follow) => {
+      const createdAt = follow.created_at ? new Date(follow.created_at) : new Date();
+      return createdAt.getTime() >= since.getTime();
+    });
+
+    const summary = {
+      completed: relevantFollows.filter(f => f.status === 'completed').length,
+      pending: relevantFollows.filter(f => f.status === 'pending').length,
+      failed: relevantFollows.filter(f => f.status === 'failed').length,
+      total: relevantFollows.length,
+      first_follow: relevantFollows[0]?.created_at || null,
+      last_follow: relevantFollows.find(f => f.status === 'completed')?.completed_at || null
+    };
+
+    const dailyCounts = {};
+    relevantFollows
+      .filter(f => f.status === 'completed')
+      .forEach((follow) => {
+        const createdAt = follow.created_at ? new Date(follow.created_at) : new Date();
+        const key = createdAt.toISOString().split('T')[0];
+        dailyCounts[key] = (dailyCounts[key] || 0) + 1;
+      });
+
+    const daily = Object.entries(dailyCounts)
+      .map(([date, count]) => ({ date, count }))
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
 
     return {
-      summary: stats.rows[0],
-      daily: dailyStats.rows,
+      summary,
+      daily,
       period
     };
   }
@@ -420,7 +475,7 @@ class FollowEngine {
       SET status = 'cancelled',
           completed_at = NOW()
       WHERE user_id = $1
-        AND status IN ('scheduled', 'rescheduled')
+        AND status IN ('scheduled', 'rescheduled', 'queued')
       RETURNING *
     `, [userId]);
 

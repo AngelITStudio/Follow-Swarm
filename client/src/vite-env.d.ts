@@ -2,6 +2,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_API_URL: string
+  readonly VITE_2FA_REDIRECT_DELAY_MS?: string
   // more env variables...
 }
 

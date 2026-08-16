@@ -24,7 +24,7 @@ const logger = require('../utils/logger');
  */
 router.get('/status', isAuthenticated, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     const user = await twoFactorAuth.getUserWith2FA(userId);
     
     const is2FARequired = await twoFactorAuth.is2FARequired(userId);
@@ -49,7 +49,7 @@ router.get('/status', isAuthenticated, async (req, res) => {
  */
 router.post('/setup', isAuthenticated, validateCsrfToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     
     // Check if 2FA already enabled
     const user = await twoFactorAuth.getUserWith2FA(userId);
@@ -78,7 +78,7 @@ router.post('/setup', isAuthenticated, validateCsrfToken, async (req, res) => {
 router.post('/verify-setup', isAuthenticated, validateCsrfToken, async (req, res) => {
   try {
     const { token } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.id;
     
     if (!token) {
       return res.status(400).json({ error: 'Token required' });
@@ -182,7 +182,7 @@ router.post('/verify-backup', twoFactorRateLimiter, async (req, res) => {
  */
 router.post('/regenerate-backup', isAuthenticated, validateCsrfToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.id;
     
     // Verify 2FA is enabled
     const user = await twoFactorAuth.getUserWith2FA(userId);
@@ -223,7 +223,7 @@ router.post('/regenerate-backup', isAuthenticated, validateCsrfToken, async (req
 router.delete('/disable', isAuthenticated, validateCsrfToken, async (req, res) => {
   try {
     const { token } = req.body;
-    const userId = req.user.userId;
+    const userId = req.user.id;
     
     // Require 2FA token to disable (security measure)
     if (!token) {

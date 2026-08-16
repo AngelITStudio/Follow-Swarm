@@ -4,7 +4,24 @@ module.exports = {
   server: {
     port: process.env.PORT || 3001,
     host: process.env.HOST || 'localhost',
-    env: process.env.NODE_ENV || 'development'
+    env: process.env.NODE_ENV || 'development',
+    corsOrigin: (() => {
+      const rawOrigins = process.env.CORS_ALLOWED_ORIGINS;
+      if (!rawOrigins) {
+        return null;
+      }
+
+      const origins = rawOrigins
+        .split(',')
+        .map(origin => origin.trim())
+        .filter(Boolean);
+
+      if (origins.length === 0) {
+        return null;
+      }
+
+      return origins.length === 1 ? origins[0] : origins;
+    })()
   },
   
   spotify: {
@@ -53,7 +70,7 @@ module.exports = {
     maxFollowsPerMonth: parseInt(process.env.MAX_FOLLOWS_PER_MONTH) || 10000,
     followDelayMin: parseInt(process.env.FOLLOW_DELAY_MIN) || 120000,
     followDelayMax: parseInt(process.env.FOLLOW_DELAY_MAX) || 240000,
-    batchSize: 50
+    batchSize: 100
   },
   
   queue: {
